@@ -215,10 +215,54 @@ class Comparator:
         csv_file_path = f'{self.folder}/rmse.csv'
         print(f'Writing RMSE data to {csv_file_path}')
         df.to_csv(csv_file_path, index=False)
+        rmse = RMSE(csv_file_path)
+
+
+class RMSE:
+    '''
+    Reads and plots the given RMSE.
+    '''
+
+    label = {
+        'temp': 'Temperature',
+        'rh': 'Relative humidity',
+    }
+    units = {
+        'temp': 'C',
+        'rh': '%',
+    }
+
+    def __init__(self, csv_file_path):
+        self.csv_file_path = pathlib.Path(csv_file_path)
+        self.name = [p for p in self.csv_file_path.parts if 'bochorno' in p][0]
+        self.folder = self.csv_file_path.parent
+        self.df = pd.read_csv(self.csv_file_path)
+        self._plot('temp')
+        self._plot('rh')
+
+    def _plot(self, field):
+        '''
+        Plots the RMSE of the given field.
+        '''
+        fig, ax = plt.subplots()
+        ax.hist(self.df[field])
+        label = self.label[field]
+        units = self.units[field]
+        ax.set_xlabel(f'RMSE [{units}]')
+        mean = np.mean(self.df[field])
+        std = np.std(self.df[field])
+        ax.set_title((
+            f'{self.name} - {label}\n'
+            f'Mean = {mean:.2f} [{units}], '
+            f'Standard deviation = {std:.2f} [{units}]\n'
+            ))
+        fig.savefig(f'{self.folder}/rmse-{field}.png')
+        plt.close(fig.number)
 
 
 if __name__ == '__main__':
     sensors = Sensors('../02-cierzo-bochorno/datos_sensores_06_24_fixed/')
-    wrf = Results('bochorno-v02-01/surface/bochorno-v02-01-d03-surface.nc')
+    wrf = Results('bochorno-v01/surface/bochorno-v01-d03-surface.nc')
+    # wrf = Results('bochorno-v02-01/surface/bochorno-v02-01-d03-surface.nc')
     comparator = Comparator(sensors, wrf)
 
