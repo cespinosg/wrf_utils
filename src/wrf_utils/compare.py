@@ -43,7 +43,6 @@ class Sensors:
         '''
         Creates the sensor object that stores the data.
         '''
-        print(f'Reading data for sensor {index+1}')
         csv_file_path = self.csv_files[index]
         sensor = Sensor(self.locations[index]['lat'],
                 self.locations[index]['lon'],
@@ -100,13 +99,17 @@ class Results:
         self.nc_file_path = pathlib.Path(nc_file_path)
         self.ds = xr.open_dataset(self.nc_file_path)
 
-    def get_value(self, field, lat, lon):
+    def get_value(self, field, lat, lon, start, end):
         '''
         Returns the values of the given field at the given coordinates.
         '''
         dist = (self.ds['XLAT'][0]-lat)**2+(self.ds['XLONG'][0]-lon)**2
-        i, j = np.unravel_index(np.argmin(dist.values), dist.values.shape)
-        return self.ds[field].sel(south_north=i, west_east=j)
+        i, j = np.unravel_index(dist.argmin(), dist.shape)
+        mask_1 = self.ds['XTIME'] >= start
+        mask_2 = self.ds['XTIME'] <= end
+        mask = mask_1*mask_2
+        time_indices = np.where(mask)[0]
+        return self.ds[field].sel(Time=time_indices, south_north=i, west_east=j)
 
 
 class Comparator:
@@ -114,9 +117,11 @@ class Comparator:
     Compares the sensor data with WRF results.
     '''
 
-    def __init__(self, sensors, wrf):
+    def __init__(self, sensors, wrf, start=None, end=None):
         self.sensors = sensors
         self.wrf = wrf
+        self.start = start
+        self.end = end
         self._set_folder()
         self._select_date()
         self._compare()
@@ -133,10 +138,10 @@ class Comparator:
         '''
         Selects the data by date.
         '''
-        start = self.wrf.ds['XTIME'][0]
-        end = self.wrf.ds['XTIME'][-1]
+        self.start = self.wrf.ds['XTIME'][0] if self.start is None else self.start
+        self.end = self.wrf.ds['XTIME'][-1] if self.end is None else self.end
         for i in range(self.sensors.n_sensors):
-            self.sensors.list[i].filter_by_date(start, end)
+            self.sensors.list[i].filter_by_date(self.start, self.end)
 
     def _compare(self):
         '''
@@ -157,7 +162,7 @@ class Comparator:
         Compares the temperature for the given sensor.
         '''
         sensor = self.sensors.list[index]
-        wrf = self.wrf.get_value('T2', sensor.lat, sensor.lon)
+        wrf = self.wrf.get_value('T2', sensor.lat, sensor.lon, self.start, self.end)
         wrf -= 273.15
         error = wrf.values-sensor.ds['temp'].values
         rmse = np.sqrt(np.mean(error**2))
@@ -172,9 +177,9 @@ class Comparator:
         Compares the relative humidity for the given sensor.
         '''
         sensor = self.sensors.list[index]
-        p = self.wrf.get_value('PSFC', sensor.lat, sensor.lon)
-        temp = self.wrf.get_value('T2', sensor.lat, sensor.lon)
-        q2 = self.wrf.get_value('Q2', sensor.lat, sensor.lon)
+        p = self.wrf.get_value('PSFC', sensor.lat, sensor.lon, self.start, self.end)
+        temp = self.wrf.get_value('T2', sensor.lat, sensor.lon, self.start, self.end)
+        q2 = self.wrf.get_value('Q2', sensor.lat, sensor.lon, self.start, self.end)
         p = p.values*units.Pa
         temp = temp.values*units.degK
         rh = relative_humidity_from_mixing_ratio(p, temp, q2.values)
@@ -217,7 +222,7 @@ class Comparator:
             csv_file_path.parent.mkdir(parents=True)
         print(f'Writing RMSE data to {csv_file_path}')
         df.to_csv(csv_file_path, index=False)
-        rmse = RMSE(csv_file_path)
+        rmse = RMSE(csv_file_path, self.start, self.end)
 
 
 class RMSE:
@@ -234,8 +239,10 @@ class RMSE:
         'rh': '%',
     }
 
-    def __init__(self, csv_file_path):
+    def __init__(self, csv_file_path, start, end):
         self.csv_file_path = pathlib.Path(csv_file_path)
+        self.start = start
+        self.end = end
         self.name = [p for p in self.csv_file_path.parts if 'bochorno' in p][0]
         self.folder = self.csv_file_path.parent
         self.df = pd.read_csv(self.csv_file_path)
@@ -253,10 +260,13 @@ class RMSE:
         ax.set_xlabel(f'RMSE [{units}]')
         mean = np.mean(self.df[field])
         std = np.std(self.df[field])
+        start = np.datetime_as_string(self.start, unit='h')
+        end = np.datetime_as_string(self.end, unit='h')
         ax.set_title((
             f'{self.name} - {label}\n'
             f'Mean = {mean:.2f} [{units}], '
             f'Standard deviation = {std:.2f} [{units}]\n'
+            f'{start} - {end}'
             ))
         fig.savefig(f'{self.folder}/rmse-{field}.png')
         plt.close(fig.number)

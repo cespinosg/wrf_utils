@@ -112,7 +112,7 @@ class GeoMesh:
 
     def get_mesh(self):
         '''
-        Plots the given field.
+        Returns the mesh lines for plotting.
         '''
         lons = self.ds['XLONG_C'].values[0]
         lats = self.ds['XLAT_C'].values[0]
@@ -122,8 +122,8 @@ class GeoMesh:
         v = [0 for i in range(len(lats))]
         for i in range(len(lats)):
             v[i] = [[lat, lon] for (lat, lon) in zip(lats[i, :], lons[i, :])]
-        meshes = {self.geo_em_file_path.name: h+v}
-        return meshes
+        mesh = {self.geo_em_file_path.name: h+v}
+        return mesh
 
 
 class CellCentres:
