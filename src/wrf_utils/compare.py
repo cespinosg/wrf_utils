@@ -212,7 +212,9 @@ class Comparator:
         Writes the RMSE.
         '''
         df = pd.DataFrame(self.rmse)
-        csv_file_path = f'{self.folder}/rmse.csv'
+        csv_file_path = pathlib.Path(f'{self.folder}/rmse/rmse.csv')
+        if not csv_file_path.parent.is_dir():
+            csv_file_path.parent.mkdir(parents=True)
         print(f'Writing RMSE data to {csv_file_path}')
         df.to_csv(csv_file_path, index=False)
         rmse = RMSE(csv_file_path)
@@ -258,11 +260,4 @@ class RMSE:
             ))
         fig.savefig(f'{self.folder}/rmse-{field}.png')
         plt.close(fig.number)
-
-
-if __name__ == '__main__':
-    sensors = Sensors('../02-cierzo-bochorno/datos_sensores_06_24_fixed/')
-    wrf = Results('bochorno-v01/surface/bochorno-v01-d03-surface.nc')
-    # wrf = Results('bochorno-v02-01/surface/bochorno-v02-01-d03-surface.nc')
-    comparator = Comparator(sensors, wrf)
 
