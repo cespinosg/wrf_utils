@@ -7,8 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 
-from plot_mesh import Sensors
-
 
 plt.rcdefaults()
 plt.rc('lines', markersize=6)
@@ -44,15 +42,19 @@ class GeoPlotter:
         i, j = np.unravel_index(np.argmin(dist.values), dist.values.shape)
         return self.ds[field].sel(south_north=i, west_east=j).values.tolist()
 
-    def plot(self, field):
+    def plot(self, field, index=None):
         '''
         Plots the given field.
         '''
         self.field = field
+        self.index = index
         self._init_plot()
-        cs = self.ax.contourf(self.ds['XLONG_M'][0], self.ds['XLAT_M'][0],
-            self.ds[self.field][0], transform=ccrs.PlateCarree(),
-            cmap=self.my_cm)
+        if self.index is None:
+            z = self.ds[self.field][0]
+        else:
+            z = self.ds[self.field][0, self.index]
+        cs = self.ax.contourf(self.ds['XLONG_M'][0], self.ds['XLAT_M'][0], z,
+            transform=ccrs.PlateCarree(), cmap=self.my_cm)
         description = self.ds[self.field].description
         units = self.ds[self.field].units
         self.fig.colorbar(cs, location='bottom',
@@ -137,7 +139,10 @@ class GeoPlotter:
         Writes the plot.
         '''
         folder = self.file_path.parent
-        name = self.file_path.stem+f'-{self.field}.png'
+        if self.index is None:
+            name = self.file_path.stem+f'-{self.field}.png'
+        else:
+            name = self.file_path.stem+f'-{self.field}-{self.index}.png'
         png_file_path = folder / name
         print(f'Writing {png_file_path}')
         self.fig.savefig(png_file_path)
@@ -151,14 +156,4 @@ def get_field_at_sensors(plotter, sensors, field):
     for s in sensors.locations:
         value = plotter.get_value(field, s['lat'], s['lon'])
         print(f'{s["code"]} {s["name"]} {value[0]}')
-
-
-if __name__ == '__main__':
-    plotter = GeoPlotter('v03/geo_em.d03.nc', city=True)
-    # plotter.plot('IRRIGATION')
-    # plotter.plot('FRC_URB2D')
-    # plotter.plot('HGT_M')
-    # plotter.plot('LU_INDEX')
-    sensors = Sensors('../02-cierzo-bochorno/mapa/sensores_islas.geojson')
-    get_field_at_sensors(plotter, sensors, 'LU_INDEX')
 

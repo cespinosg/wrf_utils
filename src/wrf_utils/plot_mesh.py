@@ -203,15 +203,3 @@ class Map:
         print(f'Writing {html_file_path}')
         self.map.save(html_file_path)
 
-
-if __name__ == '__main__':
-    zaragoza = Map()
-    # mesh = JsonMesh('v02/mesh-coords.json')
-    mesh = GeoMesh('v03/geo_em.d03.nc')
-    zaragoza.add_mesh(mesh.get_mesh())
-    sensors = Sensors('../02-cierzo-bochorno/mapa/sensores_islas.geojson')
-    zaragoza.add_sensors(sensors.locations, 'Sensors')
-    cell_centres = CellCentres('../04-wrf/bochorno-v03-01/bochorno-v03-01.json')
-    zaragoza.add_sensors(cell_centres.locations, 'Cell centres', 'red')
-    zaragoza.write('v03/mesh-with-sensors.html')
-
