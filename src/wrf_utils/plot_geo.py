@@ -5,6 +5,7 @@ from cartopy.io.img_tiles import OSM
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.pyplot as plt
 import numpy as np
+from pyproj import Proj
 import xarray as xr
 
 
@@ -108,7 +109,7 @@ class GeoPlotter:
                 (0.0, 1.0, 1.0),
                 (1.0, 0.0, 0.0),
                 ],
-            'green':[
+            'green': [
                 (0.0, 1.0, 1.0),
                 (1.0, 0.0, 0.0),
                 ],
@@ -156,4 +157,45 @@ def get_field_at_sensors(plotter, sensors, field):
     for s in sensors.locations:
         value = plotter.get_value(field, s['lat'], s['lon'])
         print(f'{s["code"]} {s["name"]} {value[0]}')
+
+
+class TopoPlotter:
+    '''
+    Plots the topography.
+    '''
+
+    def __init__(self, nc_file_path):
+        self.nc_file_path = nc_file_path
+        self.ds = xr.open_dataset(self.nc_file_path)
+        self._set_coords()
+        self._plot()
+
+    def _set_coords(self):
+        '''
+        Sets the coordinates for plotting.
+        '''
+        self.p = Proj('urn:ogc:def:crs:EPSG::25830')
+        self._set_centre()
+        self.x, self.y = self.p(self.ds['XLONG_M'][0], self.ds['XLAT_M'][0])
+        self.x -= self.x_c
+        self.y -= self.y_c
+        self.x *= 1e-3
+        self.y *= 1e-3
+
+    def _set_centre(self):
+        '''
+        Sets the centre of the map.
+        '''
+        lat_c, lon_c = 41.65606, -0.87734
+        self.x_c, self.y_c = self.p(lon_c, lat_c)
+
+    def _plot(self):
+        '''
+        Plots the topography.
+        '''
+        fig = plt.figure()
+        ax = fig.add_subplot(projection='3d')
+        ax.plot_surface(self.x, self.y, self.ds['HGT_M'][0])
+        # ax.set_aspect('equal')
+        fig.show()
 

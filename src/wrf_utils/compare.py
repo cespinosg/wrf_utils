@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from wrf_utils import helper_functions as hf
+
 
 plt.rcdefaults()
 plt.rc('lines', markersize=6)
@@ -44,12 +46,36 @@ class Sensors:
         Creates the sensor object that stores the data.
         '''
         csv_file_path = self.csv_files[index]
-        sensor = Sensor(self.locations[index]['lat'],
-                self.locations[index]['lon'],
+        sensor = Sensor(self.locations[index]['lon'],
+                self.locations[index]['lat'],
                 self.locations[index]['code'],
                 self.locations[index]['name'],
                 csv_file_path)
         return sensor
+
+    def get_field_data(self, field, start, end):
+        '''
+        Returns the field values measured by all the sensors during the given
+        period.
+        '''
+        for i in range(self.n_sensors):
+            self.list[i].filter_by_date(start, end)
+        data = np.array([s.ds[field].values for s in self.list])
+        return data
+
+    def get_field_mean(self, field, start, end):
+        '''
+        Calculates the variability for all the sensors at each hour.
+        '''
+        data = self.get_field_data(field, start, end)
+        return np.mean(data, axis=0)
+
+    def get_field_std(self, field, start, end):
+        '''
+        Calculates the variability for all the sensors at each hour.
+        '''
+        data = self.get_field_data(field, start, end)
+        return np.std(data, axis=0)
 
 
 class Sensor:
@@ -57,9 +83,9 @@ class Sensor:
     Stores the data of a sensor.
     '''
 
-    def __init__(self, lat, lon, code, name, csv_file_path):
-        self.lat = lat
+    def __init__(self, lon, lat, code, name, csv_file_path):
         self.lon = lon
+        self.lat = lat
         self.code = code
         self.name = name
         self.csv_file_path = csv_file_path
@@ -70,7 +96,8 @@ class Sensor:
         Reads the data.
         '''
         print(f'Reading {self.csv_file_path}')
-        df = pd.read_csv(self.csv_file_path, sep=';', decimal=',', parse_dates=['date'])
+        df = pd.read_csv(self.csv_file_path, sep=';', decimal=',',
+            parse_dates=['date'])
         self.ds = xr.Dataset(
             {
                 'temp': ('time', df['Temp']),
@@ -83,10 +110,7 @@ class Sensor:
         '''
         Returns the subset of the data that is between the given dates.
         '''
-        mask_1 = self.ds['time'] >= start_date
-        mask_2 = self.ds['time'] <= end_date
-        mask = mask_1*mask_2
-        indices = np.where(mask)[0]
+        indices = hf.dates_filter(self.ds['time'], start_date, end_date)
         self.ds = self.ds.isel(time=indices)
 
 
@@ -97,19 +121,76 @@ class Results:
 
     def __init__(self, nc_file_path):
         self.nc_file_path = pathlib.Path(nc_file_path)
+        self.name = self.nc_file_path.parent.name
         self.ds = xr.open_dataset(self.nc_file_path)
+        self.ds['T2'] -= 273.15
 
-    def get_value(self, field, lat, lon, start, end):
+    def get_value(self, field, lon, lat, start, end):
         '''
         Returns the values of the given field at the given coordinates.
         '''
-        dist = (self.ds['XLAT'][0]-lat)**2+(self.ds['XLONG'][0]-lon)**2
+        dist = (self.ds['XLONG'][0]-lon)**2+(self.ds['XLAT'][0]-lat)**2
         i, j = np.unravel_index(dist.argmin(), dist.shape)
-        mask_1 = self.ds['XTIME'] >= start
-        mask_2 = self.ds['XTIME'] <= end
-        mask = mask_1*mask_2
-        time_indices = np.where(mask)[0]
-        return self.ds[field].sel(Time=time_indices, south_north=i, west_east=j)
+        t = hf.dates_filter(self.ds['XTIME'], start, end)
+        field_values = self.ds[field].sel(Time=t, south_north=i, west_east=j)
+        field_values = field_values.values
+        return field_values
+
+    def get_temp(self, lon, lat, start, end):
+        '''
+        Returns the temperature in the given location during the given period.
+        '''
+        return self.get_value('T2', lon, lat, start, end)
+
+    def get_rh(self, lon, lat, start, end):
+        '''
+        Returns the relative humidity in the given location during the given
+        period.
+        '''
+        p = self.get_value('PSFC', lon, lat, start, end)*units.Pa
+        temp = self.get_value('T2', lon, lat, start, end)*units.degC
+        q2 = self.get_value('Q2', lon, lat, start, end)
+        rh = relative_humidity_from_mixing_ratio(p, temp, q2)
+        rh = rh.to('percent').m
+        return rh
+
+    def get_field_data(self, field, locations, start, end):
+        '''
+        Returns the field in the given locations during the given period.
+        '''
+        func = {
+            'rh': self.get_rh,
+            'temp': self.get_temp,
+        }[field]
+        data = [func(l['lon'], l['lat'], start, end) for l in locations]
+        data = np.array(data)
+        return data
+
+    def get_field_mean(self, field, locations, start, end):
+        '''
+        Returns the standard deviation of the given field among the given
+        locations.
+        '''
+        data = self.get_field_data(field, locations, start, end)
+        return np.mean(data, axis=0)
+
+    def get_field_std(self, field, locations, start, end):
+        '''
+        Returns the standard deviation of the given field among the given
+        locations.
+        '''
+        data = self.get_field_data(field, locations, start, end)
+        return np.std(data, axis=0)
+
+
+LABELS = {
+    'temp': 'Temperature',
+    'rh': 'Relative humidity',
+}
+UNITS = {
+    'temp': 'C',
+    'rh': '%',
+}
 
 
 class Comparator:
@@ -147,119 +228,118 @@ class Comparator:
         '''
         Compares all the sensors.
         '''
-        self.rmse = {
+        self.stats = {
                 'name': [s.name for s in self.sensors.list],
-                'temp': np.zeros(self.sensors.n_sensors),
-                'rh': np.zeros(self.sensors.n_sensors)
+                'temp_rmse': np.zeros(self.sensors.n_sensors),
+                'temp_bias': np.zeros(self.sensors.n_sensors),
+                'rh_rmse': np.zeros(self.sensors.n_sensors),
+                'rh_bias': np.zeros(self.sensors.n_sensors),
                 }
         for i in range(self.sensors.n_sensors):
             self._compare_temp(i)
             self._compare_rh(i)
-        self._write_rmse()
+        self._write_stats()
 
     def _compare_temp(self, index):
         '''
         Compares the temperature for the given sensor.
         '''
         sensor = self.sensors.list[index]
-        wrf = self.wrf.get_value('T2', sensor.lat, sensor.lon, self.start, self.end)
-        wrf -= 273.15
-        error = wrf.values-sensor.ds['temp'].values
-        rmse = np.sqrt(np.mean(error**2))
-        self.rmse['temp'][index] = rmse
-        title = f'{sensor.code:02} {sensor.name} RMSE = {rmse:.2f} [C]'
-        png_file_path = self.folder / f'temp/sensor-{sensor.code:02}-temp.png'
-        self.plot(sensor.ds['time'], sensor.ds['temp'], wrf, 'Temperature [C]',
-            title, png_file_path)
+        temp_wrf = self.wrf.get_value('T2', sensor.lon, sensor.lat, self.start,
+            self.end)
+        rmse, bias = compare_series(sensor.ds['temp'].values, temp_wrf)
+        self.stats['temp_rmse'][index] = rmse
+        self.stats['temp_bias'][index] = bias
+        stats = {'rmse': rmse, 'bias': bias}
+        self.plot(sensor, 'temp', temp_wrf, stats)
 
     def _compare_rh(self, index):
         '''
         Compares the relative humidity for the given sensor.
         '''
         sensor = self.sensors.list[index]
-        p = self.wrf.get_value('PSFC', sensor.lat, sensor.lon, self.start, self.end)
-        temp = self.wrf.get_value('T2', sensor.lat, sensor.lon, self.start, self.end)
-        q2 = self.wrf.get_value('Q2', sensor.lat, sensor.lon, self.start, self.end)
-        p = p.values*units.Pa
-        temp = temp.values*units.degK
-        rh = relative_humidity_from_mixing_ratio(p, temp, q2.values)
-        rh = rh.to('percent')
-        error = rh.m-sensor.ds['rh'].values
-        rmse = np.sqrt(np.mean(error**2))
-        self.rmse['rh'][index] = rmse
-        title = f'{sensor.code:02} {sensor.name} RMSE = {rmse:.2f} [%]'
-        png_file_path = self.folder / f'rh/sensor-{sensor.code:02}-rh.png'
-        self.plot(sensor.ds['time'], sensor.ds['rh'], rh,
-            'Relative humidity [%]', title, png_file_path)
+        rh_wrf = self.wrf.get_rh(sensor.lon, sensor.lat, self.start, self.end)
+        rmse, bias = compare_series(sensor.ds['rh'].values, rh_wrf)
+        self.stats['rh_rmse'][index] = rmse
+        self.stats['rh_bias'][index] = bias
+        stats = {'rmse': rmse, 'bias': bias}
+        self.plot(sensor, 'rh', rh_wrf, stats)
 
-    def plot(self, time, sensor, wrf, y_label, title, png_file_path):
+    def plot(self, sensor, field, wrf_values, stats):
         '''
         Plots the given field.
         '''
         fig, ax = plt.subplots()
-        ax.plot(time, sensor, label='Sensor')
-        ax.plot(time, wrf, label='WRF')
+        ax.plot(sensor.ds['time'], sensor.ds[field], label='Sensor')
+        ax.plot(sensor.ds['time'], wrf_values, label='WRF')
         ax.legend()
         ax.set_xlabel('Time')
         ax.tick_params(axis='x', labelrotation=45)
         for tick in ax.get_xticklabels():
             tick.set_horizontalalignment('right')
-        ax.set_ylabel(y_label)
+        units = UNITS[field]
+        ax.set_ylabel(LABELS[field]+' '+units)
+        title = ((f'{self.wrf.name} {sensor.code:02}-{sensor.name}\n'
+            f'RMSE = {stats["rmse"]:.2f} [{units}], '
+            f'bias = {stats["bias"]:.2f} [{units}]'))
         ax.set_title(title)
-        print(f'Writing {png_file_path}')
-        if not png_file_path.parent.is_dir():
-            png_file_path.parent.mkdir(parents=True)
-        fig.savefig(png_file_path)
-        plt.close(fig.number)
+        file_name = f'{self.wrf.name}-{field}-{sensor.code:02}.png'
+        png_file_path = self.folder / 'comparison' / file_name
+        hf.save_fig(fig, png_file_path)
 
-    def _write_rmse(self):
+    def _write_stats(self):
         '''
-        Writes the RMSE.
+        Writes the statistics of the error between the measures and the
+        simulation.
         '''
-        df = pd.DataFrame(self.rmse)
-        csv_file_path = pathlib.Path(f'{self.folder}/rmse/rmse.csv')
+        df = pd.DataFrame(self.stats)
+        csv_file_path = f'{self.folder}/stats/{self.wrf.name}-stats.csv'
+        csv_file_path = pathlib.Path(csv_file_path)
         if not csv_file_path.parent.is_dir():
             csv_file_path.parent.mkdir(parents=True)
-        print(f'Writing RMSE data to {csv_file_path}')
+        print(f'Writing statistics to {csv_file_path}')
         df.to_csv(csv_file_path, index=False)
-        rmse = RMSE(csv_file_path, self.start, self.end)
+        stats = Stats(csv_file_path, self.start, self.end, self.wrf.name)
 
 
-class RMSE:
+def compare_series(measure, simulation):
     '''
-    Reads and plots the given RMSE.
+    Compares the given time series.
+    '''
+    error = measure-simulation
+    rmse = np.sqrt(np.mean(error**2))
+    bias = np.mean(error)
+    return rmse, bias
+
+
+class Stats:
+    '''
+    Reads and plots the given statistics.
     '''
 
-    label = {
-        'temp': 'Temperature',
-        'rh': 'Relative humidity',
-    }
-    units = {
-        'temp': 'C',
-        'rh': '%',
-    }
-
-    def __init__(self, csv_file_path, start, end):
+    def __init__(self, csv_file_path, start, end, name):
         self.csv_file_path = pathlib.Path(csv_file_path)
         self.start = start
         self.end = end
-        self.name = [p for p in self.csv_file_path.parts if 'bochorno' in p][0]
+        self.name = name
         self.folder = self.csv_file_path.parent
         self.df = pd.read_csv(self.csv_file_path)
-        self._plot('temp')
-        self._plot('rh')
+        self._plot('rmse', 'temp')
+        self._plot('bias', 'temp')
+        self._plot('rmse', 'rh')
+        self._plot('bias', 'rh')
 
-    def _plot(self, field):
+    def _plot(self, var, field):
         '''
         Plots the RMSE of the given field.
         '''
         fig, ax = plt.subplots()
-        ax.hist(self.df[field])
-        label = self.label[field]
-        units = self.units[field]
-        ax.set_xlabel(f'RMSE [{units}]')
-        mean = np.mean(self.df[field])
-        std = np.std(self.df[field])
+        ax.hist(self.df[f'{field}_{var}'])
+        label = LABELS[field]
+        units = UNITS[field]
+        ax.set_xlabel(f'{var} [{units}]')
+        mean = np.mean(self.df[f'{field}_{var}'])
+        std = np.std(self.df[f'{field}_{var}'])
         start = np.datetime_as_string(self.start, unit='h')
         end = np.datetime_as_string(self.end, unit='h')
         ax.set_title((
@@ -268,6 +348,6 @@ class RMSE:
             f'Standard deviation = {std:.2f} [{units}]\n'
             f'{start} - {end}'
             ))
-        fig.savefig(f'{self.folder}/rmse-{field}.png')
+        fig.savefig(f'{self.folder}/{self.name}-{field}-{var}.png')
         plt.close(fig.number)
 
