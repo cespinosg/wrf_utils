@@ -247,7 +247,7 @@ class Temperature(SurfacePlotter):
         '''
         Plots the temperature.
         '''
-        levels = np.linspace(0, 40, 9)
+        levels = np.linspace(15, 45, 31)
         self._set_colormap()
         cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
             self.ds['T2'][self.time_index], transform=ccrs.PlateCarree(),
@@ -283,22 +283,4 @@ def plot_data(nc_file_path, start, end, plotters):
     for plotter in plotters:
         my_plotter = plotter(nc_file_path)
         my_plotter.plot_parallel(start_time=start, end_time=end)
-
-
-if __name__ == '__main__':
-    # wind = Wind('bochorno-v02-01/bochorno-v02-01-d01-surface.nc')
-    # wind = CityWind('bochorno-v02-01/bochorno-v02-01-d03-surface.nc')
-    # wind._plot_time(0)
-    # wind.plot(start_time=np.datetime64('2023-07-23 00'), end_time=np.datetime64('2023-07-23 23'))
-    # wind.plot_parallel(start_time=np.datetime64('2023-07-10 00'), end_time=np.datetime64('2023-07-11 23'))
-    start = np.datetime64('2023-07-23 00')
-    end = np.datetime64('2023-07-23 23')
-    # nc_file_path = 'bochorno-v02-01/bochorno-v02-01-d02-surface.nc'
-    # plotters = [Wind, WaterVapour, Temperature]
-    # plot_data(nc_file_path, start, end, plotters)
-    nc_file_path = 'bochorno-v02-01/surface/bochorno-v02-01-d03-surface.nc'
-    plotters = [
-        # CityWind, CityWaterVapour,
-        CityTemperature]
-    plot_data(nc_file_path, start, end, plotters)
 
