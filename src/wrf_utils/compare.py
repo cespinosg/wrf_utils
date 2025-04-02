@@ -306,7 +306,7 @@ def compare_series(measure, simulation):
     '''
     Compares the given time series.
     '''
-    error = measure-simulation
+    error = simulation-measure
     rmse = np.sqrt(np.mean(error**2))
     bias = np.mean(error)
     return rmse, bias
