@@ -48,6 +48,7 @@ class Sensors:
         codes = [l['code'] for l in self.locations]
         indices = np.argsort(codes)
         self.locations = [self.locations[i] for i in indices]
+        self.n = len(self.locations)
 
 
 class JsonMesh:
