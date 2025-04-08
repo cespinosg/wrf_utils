@@ -25,8 +25,9 @@ class SurfacePlotter:
     Plots surface data.
     '''
 
-    def __init__(self, nc_file_path):
+    def __init__(self, nc_file_path, title=None):
         self.nc_file_path = pathlib.Path(nc_file_path)
+        self.title = title
         self._read()
         self._set_folder()
 
@@ -140,7 +141,10 @@ class SurfacePlotter:
         Sets the plot title.
         '''
         self.time = self.times[self.time_index].item()
-        self.ax.set_title(self.time.strftime('%d/%m/%Y %H UTC'))
+        title = self.time.strftime('%d/%m/%Y %H UTC')
+        if self.title is not None:
+            title = self.title+'\n'+title
+        self.ax.set_title(title)
 
     def _write(self):
         '''
@@ -299,18 +303,7 @@ class HeatIsland(CityPlotter):
         self.lon = lon
         self.lat = lat
         super().__init__(*args, **kwargs)
-
-    def _plot_data(self):
-        '''
-        Plots the temperature.
-        '''
         self._calculate_heat_island()
-        levels = np.linspace(-5, 5, 11)
-        cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
-            self.ds['HI'][self.time_index], transform=ccrs.PlateCarree(),
-            levels=levels, extend='both', cmap='coolwarm', alpha=0.5)
-        self.fig.colorbar(cs, location='bottom', label='Temperature [C] at 2 m',
-            shrink=0.75)
 
     def _calculate_heat_island(self):
         '''
@@ -319,6 +312,19 @@ class HeatIsland(CityPlotter):
         dist = (self.ds['XLAT'][0]-self.lat)**2+(self.ds['XLONG'][0]-self.lon)**2
         i, j = np.unravel_index(dist.argmin(), dist.shape)
         self.ds['HI'] = self.ds['T2']-self.ds['T2'].isel(south_north=i, west_east=j)
+        condition = abs(self.ds['HI']) >= 2.0
+        self.ds['HI'] = self.ds['HI'].where(condition)
+
+    def _plot_data(self):
+        '''
+        Plots the temperature.
+        '''
+        levels = np.linspace(-5, 5, 11)
+        cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
+            self.ds['HI'][self.time_index], transform=ccrs.PlateCarree(),
+            levels=levels, extend='both', cmap='coolwarm', alpha=0.75)
+        self.fig.colorbar(cs, location='bottom', label='Temperature [C] at 2 m',
+            shrink=0.75)
 
 
 def plot_data(plotters, start, end, parallel=True):
