@@ -158,6 +158,12 @@ class CityPlotter(SurfacePlotter):
     Plots the surface data in the city. An OSM is added to the background.
     '''
 
+    resolution = 10
+
+    def __init__(self, *args, extent=None, **kwargs):
+        self.extent = extent
+        super().__init__(*args, **kwargs)
+
     def _init_plot(self):
         '''
         Initialises the plot.
@@ -166,12 +172,19 @@ class CityPlotter(SurfacePlotter):
         self.fig = plt.figure(figsize=(7, 7))
         imagery = OSM(cache=True)
         self.ax = self.fig.add_subplot(1, 1, 1, projection=imagery.crs)
-        self.ax.set_extent((self.ds['XLONG'][0].min(), self.ds['XLONG'].max(),
-            self.ds['XLAT'][0].min(), self.ds['XLAT'][0].max()),
-            crs=ccrs.Geodetic())
-        self.ax.add_image(imagery, 10)
-        self.ax.gridlines(draw_labels=True, dms=True)
+        self._set_extent()
+        self.ax.add_image(imagery, self.resolution)
+        self.ax.gridlines(draw_labels=True, dms=False)
         self._set_colormap()
+
+    def _set_extent(self):
+        '''
+        Sets the extent of the plot.
+        '''
+        if self.extent is None:
+            self.extent = (self.ds['XLONG'][0].min(), self.ds['XLONG'][0].max(),
+                self.ds['XLAT'][0].min(), self.ds['XLAT'][0].max())
+        self.ax.set_extent(self.extent, crs=ccrs.Geodetic())
 
 
 class Wind(SurfacePlotter):
@@ -227,7 +240,6 @@ class WaterVapour(SurfacePlotter):
         Plots the water vapour content.
         '''
         levels = np.linspace(0, 20, 9)
-        self._set_colormap()
         cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
             self.ds['Q2'][self.time_index],
             transform=ccrs.PlateCarree(), levels=levels, extend='max',
@@ -248,7 +260,6 @@ class Temperature(SurfacePlotter):
         Plots the temperature.
         '''
         levels = np.linspace(15, 45, 31)
-        self._set_colormap()
         cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
             self.ds['T2'][self.time_index], transform=ccrs.PlateCarree(),
             levels=levels, extend='both', cmap='coolwarm', alpha=0.5)
@@ -276,11 +287,47 @@ class CityTemperature(CityPlotter, Temperature):
     '''
 
 
-def plot_data(nc_file_path, start, end, plotters):
+class HeatIsland(CityPlotter):
+    '''
+    Plots the temperature.
+    '''
+
+    field = 'hi'
+    resolution = 11
+
+    def __init__(self, lon, lat, *args, **kwargs):
+        self.lon = lon
+        self.lat = lat
+        super().__init__(*args, **kwargs)
+
+    def _plot_data(self):
+        '''
+        Plots the temperature.
+        '''
+        self._calculate_heat_island()
+        levels = np.linspace(-5, 5, 11)
+        cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
+            self.ds['HI'][self.time_index], transform=ccrs.PlateCarree(),
+            levels=levels, extend='both', cmap='coolwarm', alpha=0.5)
+        self.fig.colorbar(cs, location='bottom', label='Temperature [C] at 2 m',
+            shrink=0.75)
+
+    def _calculate_heat_island(self):
+        '''
+        Calculates the heat island.
+        '''
+        dist = (self.ds['XLAT'][0]-self.lat)**2+(self.ds['XLONG'][0]-self.lon)**2
+        i, j = np.unravel_index(dist.argmin(), dist.shape)
+        self.ds['HI'] = self.ds['T2']-self.ds['T2'].isel(south_north=i, west_east=j)
+
+
+def plot_data(plotters, start, end, parallel=True):
     '''
     Plots the given data.
     '''
     for plotter in plotters:
-        my_plotter = plotter(nc_file_path)
-        my_plotter.plot_parallel(start_time=start, end_time=end)
+        if parallel:
+            plotter.plot_parallel(start_time=start, end_time=end)
+        else:
+            plotter.plot(start_time=start, end_time=end)
 
