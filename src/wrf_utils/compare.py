@@ -278,7 +278,7 @@ class Comparator:
         for tick in ax.get_xticklabels():
             tick.set_horizontalalignment('right')
         units = UNITS[field]
-        ax.set_ylabel(LABELS[field]+' '+units)
+        ax.set_ylabel(LABELS[field]+f' [{units}]')
         title = ((f'{self.wrf.name} {sensor.code:02}-{sensor.name}\n'
             f'RMSE = {stats["rmse"]:.2f} [{units}], '
             f'bias = {stats["bias"]:.2f} [{units}]'))
