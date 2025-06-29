@@ -7,11 +7,11 @@ class Interpolator:
     Interpolates the dataset at the sensor locations.
     '''
 
-    def __init__(self, sensors, ds, lat, lon):
+    def __init__(self, sensors, ds, lat_key, lon_key):
         self.sensors = sensors
         self.ds = ds
-        self.lat = lat
-        self.lon = lon
+        self.lat_key = lat_key
+        self.lon_key = lon_key
         self._find_indices()
 
     def _find_indices(self):
@@ -21,8 +21,8 @@ class Interpolator:
         self.i = [0 for i in range(self.sensors.n)]
         self.j = [0 for i in range(self.sensors.n)]
         for (k, s) in enumerate(self.sensors.locations):
-            dist = (self.ds[self.lat][0]-s['lat'])**2+\
-                (self.ds[self.lon][0]-s['lon'])**2
+            dist = (self.ds[self.lat_key][0]-s['lat'])**2+\
+                (self.ds[self.lon_key][0]-s['lon'])**2
             self.i[k], self.j[k] = np.unravel_index(dist.argmin(), dist.shape)
 
     def get_field(self, field):
