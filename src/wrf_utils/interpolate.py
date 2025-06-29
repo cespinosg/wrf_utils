@@ -32,6 +32,6 @@ class Interpolator:
         values = [0 for i in range(self.sensors.n)]
         for k in range(self.sensors.n):
             values[k] = self.ds[field].sel(south_north=self.i[k],
-                west_east=self.j[k]).values
-        return np.array(values)
+                west_east=self.j[k])
+        return values
 

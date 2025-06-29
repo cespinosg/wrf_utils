@@ -183,6 +183,61 @@ class Results:
         return np.std(data, axis=0)
 
 
+class WRFSensors:
+    '''
+    Contains the WRF results at the sensors locations.
+    '''
+
+    def __init__(self, folder):
+        self.folder = folder
+        self._read_csvs()
+
+    def _read_csvs(self):
+        '''
+        Reads the csv files.
+        '''
+        self._read_tc_df()
+        self._read_rh_df()
+        self._merge_dfs()
+
+    def _read_tc_df(self):
+        '''
+        Reads the csv file with the temperature data.
+        '''
+        self.tc_csv_fp = f'{self.folder}/{self.folder}-sensors-tc.csv'
+        print(f'Reading {self.tc_csv_fp}')
+        self.tc_df = pd.read_csv(self.tc_csv_fp, parse_dates=['t'])
+
+    def _read_rh_df(self):
+        '''
+        Reads the csv file with the relative humidity data.
+        '''
+        self.rh_csv_fp = f'{self.folder}/{self.folder}-sensors-rh.csv'
+        print(f'Reading {self.rh_csv_fp}')
+        self.rh_df = pd.read_csv(self.rh_csv_fp, parse_dates=['t'])
+
+    def _merge_dfs(self):
+        '''
+        Merges the temperature and relative humidity DataFrames.
+        '''
+        self.n_sensors = len(self.tc_df.columns)-1
+        self.df = pd.DataFrame({'t': self.tc_df['t']})
+        for s in range(1, self.n_sensors+1):
+            self.df[f's{s:02}_tc'] = self.tc_df[f's{s:02}']
+            self.df[f's{s:02}_rh'] = self.rh_df[f's{s:02}']
+
+    def filter_by_date(self, start=None, end=None):
+        '''
+        Filters the results by date.
+        '''
+        if start is not None:
+            mask = self.df['t'] >= start
+            self.df = self.df[mask]
+        if end is not None:
+            mask = self.df['t'] <= end
+            self.df = self.df[mask]
+
+
 LABELS = {
     'temp': 'Temperature',
     'rh': 'Relative humidity',
