@@ -91,7 +91,9 @@ class GeoPlotter:
         self.ax.set_extent(
             (
                 self.ds['XLONG_C'][0].min(), self.ds['XLONG_C'][0].max(),
-                self.ds['XLAT_C'][0].min(), self.ds['XLAT_C'][0].max()
+                # 41.4479, 42.0587
+                41.4479, 42.01
+                # self.ds['XLAT_C'][0].min(), self.ds['XLAT_C'][0].max()
             ),
             crs=ccrs.Geodetic()
         )
@@ -141,9 +143,9 @@ class GeoPlotter:
         '''
         folder = self.file_path.parent
         if self.index is None:
-            name = self.file_path.stem+f'-{self.field}.png'
+            name = self.file_path.stem+f'-{self.field}.pdf'
         else:
-            name = self.file_path.stem+f'-{self.field}-{self.index}.png'
+            name = self.file_path.stem+f'-{self.field}-{self.index}.pdf'
         png_file_path = folder / name
         print(f'Writing {png_file_path}')
         self.fig.savefig(png_file_path)

@@ -12,14 +12,15 @@ class Interpolator:
         self.ds = ds
         self.lat_key = lat_key
         self.lon_key = lon_key
+        self.n_sensors = len(self.sensors.locations)
         self._find_indices()
 
     def _find_indices(self):
         '''
         Finds the indices that correspond to each sensor.
         '''
-        self.i = [0 for i in range(self.sensors.n)]
-        self.j = [0 for i in range(self.sensors.n)]
+        self.i = [0 for i in range(self.n_sensors)]
+        self.j = [0 for i in range(self.n_sensors)]
         for (k, s) in enumerate(self.sensors.locations):
             dist = (self.ds[self.lat_key][0]-s['lat'])**2+\
                 (self.ds[self.lon_key][0]-s['lon'])**2
@@ -29,9 +30,9 @@ class Interpolator:
         '''
         Returns the given field at all the sensors locations.
         '''
-        values = [0 for i in range(self.sensors.n)]
-        for k in range(self.sensors.n):
+        values = [0 for i in range(self.n_sensors)]
+        for k in range(self.n_sensors):
             values[k] = self.ds[field].sel(south_north=self.i[k],
-                west_east=self.j[k])
+                west_east=self.j[k]).values
         return values
 

@@ -217,7 +217,7 @@ LABELS = {
     'rh': 'Relative humidity',
 }
 UNITS = {
-    'temp': 'C',
+    'temp': 'ºC',
     'rh': '%',
 }
 
@@ -273,7 +273,7 @@ class Comparator:
         self.stats['temp_rmse'][index] = rmse
         self.stats['temp_bias'][index] = bias
         stats = {'rmse': rmse, 'bias': bias}
-        self.plot('temp', sensor_tc, wrf_tc, stats, index)
+        # self.plot('temp', sensor_tc, wrf_tc, stats, index)
 
     def _compare_rh(self, index):
         '''
@@ -285,11 +285,11 @@ class Comparator:
         self.stats['rh_rmse'][index] = rmse
         self.stats['rh_bias'][index] = bias
         stats = {'rmse': rmse, 'bias': bias}
-        self.plot('rh', sensor_rh, wrf_rh, stats, index)
+        # self.plot('rh', sensor_rh, wrf_rh, stats, index)
 
     def plot(self, field, sensor_data, wrf_data, stats, index):
         '''
-        Plots the given field.
+        Plots the given field of the given sensor index.
         '''
         fig, ax = plt.subplots()
         ax.plot(self.t, sensor_data, label='Sensor')
@@ -361,7 +361,11 @@ class Stats:
         ax.hist(self.df[f'{field}_{var}'])
         label = LABELS[field]
         units = UNITS[field]
-        ax.set_xlabel(f'{var} [{units}]')
+        name = {
+            'rmse': 'RMSE',
+            'bias': 'Bias',
+        }[var]
+        ax.set_xlabel(f'{name} [{units}]')
         mean = np.mean(self.df[f'{field}_{var}'])
         std = np.std(self.df[f'{field}_{var}'])
         start = np.datetime_as_string(self.start, unit='h')
