@@ -4,7 +4,7 @@ import time
 
 import cartopy.crs as ccrs
 from cartopy.io.img_tiles import OSM
-from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
@@ -134,7 +134,7 @@ class SurfacePlotter:
                 (1.0, 1.0, 1.0),
                 ],
            }
-        self.my_cm = LinearSegmentedColormap('my_cm', cm_dict)
+        self.my_cm = mcolors.LinearSegmentedColormap('my_cm', cm_dict)
 
     def _set_title(self):
         '''
@@ -162,10 +162,9 @@ class CityPlotter(SurfacePlotter):
     Plots the surface data in the city. An OSM is added to the background.
     '''
 
-    resolution = 10
-
-    def __init__(self, *args, extent=None, **kwargs):
-        self.extent = extent
+    def __init__(self, *args, custom_extent=None, resolution=None, **kwargs):
+        self.custom_extent = custom_extent
+        self.resolution = 10 if resolution is None else resolution
         super().__init__(*args, **kwargs)
 
     def _init_plot(self):
@@ -185,9 +184,11 @@ class CityPlotter(SurfacePlotter):
         '''
         Sets the extent of the plot.
         '''
-        if self.extent is None:
+        if self.custom_extent is None:
             self.extent = (self.ds['XLONG'][0].min(), self.ds['XLONG'][0].max(),
                 self.ds['XLAT'][0].min(), self.ds['XLAT'][0].max())
+        else:
+            self.extent = self.custom_extent
         self.ax.set_extent(self.extent, crs=ccrs.Geodetic())
 
 
@@ -214,7 +215,7 @@ class Wind(SurfacePlotter):
         cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
             self.ds['wind'][self.time_index],
             transform=ccrs.PlateCarree(), levels=levels, extend='max',
-            cmap=self.my_cm)
+            cmap=self.my_cm, alpha=0.5)
         self.fig.colorbar(cs, location='bottom', label='Wind speed [m/s] at 10 m',
             shrink=0.75)
 
@@ -258,6 +259,45 @@ class Temperature(SurfacePlotter):
     '''
 
     field = 't2'
+    point_data = False
+
+    def _plot_data(self):
+        '''
+        Plots the temperature.
+        '''
+        if self.custom_extent is not None:
+            west_i = np.where(self.ds['XLONG'][0, 0].values >= self.extent[0])[0][0]
+            east_i = np.where(self.ds['XLONG'][0, 0].values <= self.extent[1])[0][-1]
+            south_i = np.where(self.ds['XLAT'][0, :, 0].values >= self.extent[2])[0][0]
+            north_i = np.where(self.ds['XLAT'][0, :, 0].values <= self.extent[3])[0][-1]
+            z = self.ds['T2'][self.time_index, south_i:north_i, west_i:east_i].values
+            lon = self.ds['XLONG'][0, south_i:north_i, west_i:east_i]
+            lat = self.ds['XLAT'][0, south_i:north_i, west_i:east_i]
+        else:
+            z = self.ds['T2'][self.time_index].values
+            lon = self.ds['XLONG'][0]
+            lat = self.ds['XLAT'][0]
+        # levels = np.linspace(np.floor(z.min()), np.ceil(z.max()), 6)
+        levels = np.linspace(39, 44, 6)
+        if self.point_data:
+            cs = self.ax.contourf(lon, lat, z,
+                transform=ccrs.PlateCarree(), levels=levels, extend='both',
+                cmap='Reds', alpha=0.5)
+        else:
+            norm = mcolors.BoundaryNorm(levels, ncolors=plt.cm.viridis.N)
+            cs = self.ax.pcolormesh(lon, lat, z,
+                shading='nearest', transform=ccrs.PlateCarree(), alpha=0.5,
+                cmap='Reds', norm=norm)
+        self.fig.colorbar(cs, location='bottom', label='Temperature [ºC] at 2 m',
+            shrink=0.75)
+
+
+class Comfort50(SurfacePlotter):
+    '''
+    Plots the temperature.
+    '''
+
+    field = 'comf50'
 
     def _plot_data(self):
         '''
@@ -265,9 +305,9 @@ class Temperature(SurfacePlotter):
         '''
         levels = np.linspace(15, 45, 31)
         cs = self.ax.contourf(self.ds['XLONG'][0], self.ds['XLAT'][0],
-            self.ds['T2'][self.time_index], transform=ccrs.PlateCarree(),
+            self.ds['COMF_50'][self.time_index], transform=ccrs.PlateCarree(),
             levels=levels, extend='both', cmap='coolwarm', alpha=0.5)
-        self.fig.colorbar(cs, location='bottom', label='Temperature [C] at 2 m',
+        self.fig.colorbar(cs, location='bottom', label='UTCI [C]',
             shrink=0.75)
 
 
@@ -286,6 +326,12 @@ class CityWaterVapour(CityPlotter, WaterVapour):
 
 
 class CityTemperature(CityPlotter, Temperature):
+    '''
+    Plots the temperature in the city.
+    '''
+
+
+class CityComfort50(CityPlotter, Comfort50):
     '''
     Plots the temperature in the city.
     '''
